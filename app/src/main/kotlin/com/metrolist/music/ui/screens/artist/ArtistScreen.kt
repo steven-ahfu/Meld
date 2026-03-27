@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +38,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -186,6 +188,9 @@ fun ArtistScreen(
         LazyColumn(
             state = lazyListState,
             contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
+            modifier = Modifier
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .focusable(),
         ) {
             if (artistPage == null && !showLocal) {
                 item(key = "shimmer") {
@@ -1001,6 +1006,7 @@ fun ArtistScreen(
                 )
             }
         },
+        scrollBehavior = scrollBehavior,
         colors = if (transparentAppBar) {
             TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
         } else {

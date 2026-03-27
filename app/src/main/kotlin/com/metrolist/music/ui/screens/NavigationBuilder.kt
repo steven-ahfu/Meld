@@ -60,10 +60,14 @@ import com.metrolist.music.ui.screens.settings.integrations.DiscordSettings
 import com.metrolist.music.ui.screens.settings.integrations.IntegrationScreen
 import com.metrolist.music.ui.screens.settings.integrations.LastFMSettings
 import com.metrolist.music.ui.screens.settings.integrations.ListenTogetherSettings
+import com.metrolist.music.ui.screens.SoundCloudLoginScreen
+import com.metrolist.music.ui.screens.settings.integrations.SoundCloudSettings
 import com.metrolist.music.ui.screens.settings.integrations.SpotifyPreloadScreen
 import com.metrolist.music.ui.screens.settings.integrations.SpotifySettings
 import com.metrolist.music.ui.screens.recognition.RecognitionScreen
 import com.metrolist.music.ui.screens.recognition.RecognitionHistoryScreen
+import com.metrolist.music.ui.screens.soundcloud.SoundCloudArtistScreen
+import com.metrolist.music.ui.screens.soundcloud.SoundCloudPlaylistScreen
 import com.metrolist.music.ui.screens.wrapped.WrappedScreen
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
@@ -209,7 +213,16 @@ fun NavGraphBuilder.navigationBuilder(
             },
         ),
     ) {
-        ArtistScreen(navController, scrollBehavior)
+        val artistId = it.arguments?.getString("artistId") ?: ""
+        if (artistId.startsWith("soundcloud:")) {
+            androidx.compose.runtime.LaunchedEffect(artistId) {
+                navController.navigate("soundcloud_artist/${artistId.removePrefix("soundcloud:")}") {
+                    popUpTo("artist/$artistId") { inclusive = true }
+                }
+            }
+        } else {
+            ArtistScreen(navController, scrollBehavior)
+        }
     }
 
     composable(
@@ -261,7 +274,38 @@ fun NavGraphBuilder.navigationBuilder(
             },
         ),
     ) {
-        OnlinePlaylistScreen(navController, scrollBehavior)
+        val playlistId = it.arguments?.getString("playlistId") ?: ""
+        if (playlistId.startsWith("soundcloud:")) {
+            androidx.compose.runtime.LaunchedEffect(playlistId) {
+                navController.navigate("soundcloud_playlist/${playlistId.removePrefix("soundcloud:")}") {
+                    popUpTo("online_playlist/$playlistId") { inclusive = true }
+                }
+            }
+        } else {
+            OnlinePlaylistScreen(navController, scrollBehavior)
+        }
+    }
+
+    composable(
+        route = "soundcloud_playlist/{playlistId}",
+        arguments = listOf(
+            navArgument("playlistId") {
+                type = NavType.StringType
+            },
+        ),
+    ) {
+        SoundCloudPlaylistScreen(navController)
+    }
+
+    composable(
+        route = "soundcloud_artist/{artistId}",
+        arguments = listOf(
+            navArgument("artistId") {
+                type = NavType.StringType
+            },
+        ),
+    ) {
+        SoundCloudArtistScreen(navController)
     }
 
     composable(
@@ -395,12 +439,20 @@ fun NavGraphBuilder.navigationBuilder(
         SpotifySettings(navController, scrollBehavior)
     }
 
+    composable("settings/integrations/soundcloud") {
+        SoundCloudSettings(navController, scrollBehavior)
+    }
+
     composable("settings/integrations/spotify/preload") {
         SpotifyPreloadScreen(navController, scrollBehavior)
     }
 
     composable("settings/spotify/login") {
         SpotifyLoginScreen(navController)
+    }
+
+    composable("settings/soundcloud/login") {
+        SoundCloudLoginScreen(navController)
     }
 
     composable(

@@ -27,6 +27,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -159,6 +160,7 @@ import com.metrolist.music.playback.MusicService
 import com.metrolist.music.playback.MusicService.MusicBinder
 import com.metrolist.music.playback.PlayerConnection
 import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.providers.soundcloud.SoundCloudLoginCoordinator
 import com.metrolist.music.ui.component.AccountSettingsDialog
 import com.metrolist.music.ui.component.AppNavigationBar
 import com.metrolist.music.ui.component.AppNavigationRail
@@ -607,7 +609,8 @@ class MainActivity : ComponentActivity() {
                 val shouldShowNavigationBar = remember(currentRoute, navigationItemRoutes) {
                     currentRoute == null ||
                         navigationItemRoutes.contains(currentRoute) ||
-                        currentRoute!!.startsWith("search/")
+                        currentRoute!!.startsWith("search/") ||
+                        currentRoute!!.startsWith("settings/")
                 }
 
                 val isLandscape = configuration.containerDpSize.width > configuration.containerDpSize.height
@@ -1043,7 +1046,7 @@ class MainActivity : ComponentActivity() {
                                     onSearchLongClick = onRailSearchLongClick
                                 )
                             }
-                            Box(Modifier.weight(1f)) {
+                            Box(Modifier.weight(1f).focusable()) {
                                 // NavHost with animations (Material 3 Expressive style)
                                 NavHost(
                                     navController = navController,
@@ -1190,6 +1193,17 @@ class MainActivity : ComponentActivity() {
         intent.data = null
         intent.removeExtra(Intent.EXTRA_TEXT)
         val coroutineScope = lifecycle.coroutineScope
+
+        if (
+            uri.scheme.equals("meld", ignoreCase = true) &&
+            uri.host.equals("soundcloud-auth", ignoreCase = true)
+        ) {
+            SoundCloudLoginCoordinator.onCallback(uri.toString())
+            navController.navigate("settings/soundcloud/login") {
+                launchSingleTop = true
+            }
+            return
+        }
 
         val listenCode = uri.getQueryParameter("code")
             ?: uri.getQueryParameter("room")

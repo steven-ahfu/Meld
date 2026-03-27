@@ -63,6 +63,13 @@ fun IntegrationScreen(
                     onClick = {
                         navController.navigate("settings/integrations/spotify")
                     }
+                ),
+                IntegrationCardItem(
+                    icon = painterResource(R.drawable.cloud),
+                    title = { Text(stringResource(R.string.soundcloud_integration)) },
+                    onClick = {
+                        navController.navigate("settings/integrations/soundcloud")
+                    }
                 )
             )
         )

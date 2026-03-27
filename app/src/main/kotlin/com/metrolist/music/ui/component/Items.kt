@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
@@ -1252,9 +1253,11 @@ fun ItemThumbnail(
     modifier: Modifier = Modifier,
     albumIndex: Int? = null,
     isSelected: Boolean = false,
-    thumbnailRatio: Float = 1f
+    thumbnailRatio: Float = 1f,
 ) {
     val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
+    val playerConnection = LocalPlayerConnection.current
+    val isBuffering by playerConnection?.isBuffering?.collectAsState() ?: remember { mutableStateOf(false) }
     
     Box(
         contentAlignment = Alignment.Center,
@@ -1313,6 +1316,7 @@ fun ItemThumbnail(
         PlayingIndicatorBox(
             isActive = isActive,
             playWhenReady = isPlaying,
+            isBuffering = isActive && isBuffering,
             color = if (albumIndex != null) MaterialTheme.colorScheme.onBackground else Color.White,
             modifier = Modifier
                 .fillMaxSize()
@@ -1336,9 +1340,11 @@ fun LocalThumbnail(
     modifier: Modifier = Modifier,
     showCenterPlay: Boolean = false,
     playButtonVisible: Boolean = false,
-    thumbnailRatio: Float = 1f
+    thumbnailRatio: Float = 1f,
 ) {
     val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
+    val playerConnection = LocalPlayerConnection.current
+    val isBuffering by playerConnection?.isBuffering?.collectAsState() ?: remember { mutableStateOf(false) }
     
     Box(
         contentAlignment = Alignment.Center,
@@ -1370,10 +1376,18 @@ fun LocalThumbnail(
                     .background(Color.Black.copy(alpha = 0.4f), shape)
             ) {
                 if (isPlaying) {
-                    PlayingIndicator(
-                        color = Color.White,
-                        modifier = Modifier.height(24.dp)
-                    )
+                    if (isBuffering) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    } else {
+                        PlayingIndicator(
+                            color = Color.White,
+                            modifier = Modifier.height(24.dp)
+                        )
+                    }
                 } else {
                     Icon(
                         painter = painterResource(R.drawable.play),

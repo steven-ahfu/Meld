@@ -88,6 +88,18 @@
                     android:pathPrefix="/callback" />
             </intent-filter>
 
+            <!-- SoundCloud OAuth callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:scheme="meld"
+                    android:host="soundcloud-auth" />
+            </intent-filter>
+
             <!-- Listen Together invite link -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

@@ -22,7 +22,7 @@ android {
         applicationId = "com.meld.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
+        versionCode = 12
         versionName = "0.6.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -31,9 +31,15 @@ android {
         // LastFM API keys from GitHub Secrets
         val lastFmKey = localProperties.getProperty("LASTFM_API_KEY") ?: System.getenv("LASTFM_API_KEY") ?: ""
         val lastFmSecret = localProperties.getProperty("LASTFM_SECRET") ?: System.getenv("LASTFM_SECRET") ?: ""
+        val soundCloudClientId = localProperties.getProperty("SOUNDCLOUD_CLIENT_ID") ?: System.getenv("SOUNDCLOUD_CLIENT_ID") ?: ""
+        val soundCloudClientSecret = localProperties.getProperty("SOUNDCLOUD_CLIENT_SECRET") ?: System.getenv("SOUNDCLOUD_CLIENT_SECRET") ?: ""
+        val soundCloudRedirectUri = localProperties.getProperty("SOUNDCLOUD_REDIRECT_URI") ?: System.getenv("SOUNDCLOUD_REDIRECT_URI") ?: "meld://soundcloud-auth"
 
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastFmKey\"")
         buildConfigField("String", "LASTFM_SECRET", "\"$lastFmSecret\"")
+        buildConfigField("String", "SOUNDCLOUD_CLIENT_ID", "\"$soundCloudClientId\"")
+        buildConfigField("String", "SOUNDCLOUD_CLIENT_SECRET", "\"$soundCloudClientSecret\"")
+        buildConfigField("String", "SOUNDCLOUD_REDIRECT_URI", "\"$soundCloudRedirectUri\"")
 
         
         ndk {
@@ -47,7 +53,7 @@ android {
         create("foss") {
             dimension = "variant"
             isDefault = true
-            buildConfigField("Boolean", "CAST_AVAILABLE", "false")
+            buildConfigField("Boolean", "CAST_AVAILABLE", "true")
         }
         
         // GMS variant - with Google Cast support (requires Google Play Services)
@@ -80,10 +86,10 @@ android {
 
     signingConfigs {
         create("persistentDebug") {
-            storeFile = file("persistent-debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storeFile = file("${rootProject.projectDir}/../../keystore")
+            storePassword = "keystore"
+            keyAlias = "keystore"
+            keyPassword = "keystore"
         }
         create("release") {
             storeFile = file("keystore/release.keystore")
@@ -179,6 +185,7 @@ android {
             excludes += "META-INF/io.netty.versions.properties"
         }
     }
+    buildToolsVersion = "36.1.0"
 }
 
 ksp {
@@ -229,6 +236,7 @@ dependencies {
     implementation(libs.shimmer)
 
     implementation(libs.media3)
+    implementation(libs.media3.hls)
     implementation(libs.media3.session)
     implementation(libs.media3.okhttp)
 
@@ -258,6 +266,7 @@ dependencies {
     implementation(project(":simpmusic"))
     implementation(project(":shazamkit"))
     implementation(project(":spotify"))
+    implementation(project(":soundcloud"))
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.cio)

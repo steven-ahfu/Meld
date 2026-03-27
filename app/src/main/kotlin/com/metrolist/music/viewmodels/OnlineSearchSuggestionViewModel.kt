@@ -12,8 +12,11 @@ import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.filterExplicit
 import com.metrolist.innertube.models.filterVideoSongs
+import com.metrolist.music.constants.EnableSoundCloudKey
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideVideoSongsKey
+import com.metrolist.music.constants.SoundCloudAccessTokenKey
+import com.metrolist.music.constants.UseSoundCloudSearchKey
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.SearchHistory
 import com.metrolist.music.utils.dataStore
@@ -24,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -51,31 +55,46 @@ constructor(
                             )
                         }
                     } else {
-                        val result = YouTube.searchSuggestions(query).getOrNull()
-                        val hideExplicit = context.dataStore.get(HideExplicitKey, false)
-                        val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false)
+                        val prefs = context.dataStore.data.first()
+                        val isSoundCloudSearch =
+                            (prefs[EnableSoundCloudKey] ?: false) &&
+                                (prefs[UseSoundCloudSearchKey] ?: false) &&
+                                (prefs[SoundCloudAccessTokenKey] ?: "").isNotEmpty()
 
-                        database
-                            .searchHistory(query)
-                            .map { it.take(3) }
-                            .map { history ->
-                                SearchSuggestionViewState(
-                                    history = history,
-                                    suggestions =
-                                    result
-                                        ?.queries
-                                        ?.filter { suggestionQuery ->
-                                            history.none { it.query == suggestionQuery }
-                                        }.orEmpty(),
-                                    items =
-                                    result
-                                        ?.recommendedItems
-                                        ?.distinctBy { it.id }
-                                        ?.filterExplicit(hideExplicit)
-                                        ?.filterVideoSongs(hideVideoSongs)
-                                        .orEmpty(),
-                                )
-                            }
+                        if (isSoundCloudSearch) {
+                            database
+                                .searchHistory(query)
+                                .map { it.take(3) }
+                                .map { history ->
+                                    SearchSuggestionViewState(history = history)
+                                }
+                        } else {
+                            val result = YouTube.searchSuggestions(query).getOrNull()
+                            val hideExplicit = context.dataStore.get(HideExplicitKey, false)
+                            val hideVideoSongs = context.dataStore.get(HideVideoSongsKey, false)
+
+                            database
+                                .searchHistory(query)
+                                .map { it.take(3) }
+                                .map { history ->
+                                    SearchSuggestionViewState(
+                                        history = history,
+                                        suggestions =
+                                        result
+                                            ?.queries
+                                            ?.filter { suggestionQuery ->
+                                                history.none { it.query == suggestionQuery }
+                                            }.orEmpty(),
+                                        items =
+                                        result
+                                            ?.recommendedItems
+                                            ?.distinctBy { it.id }
+                                            ?.filterExplicit(hideExplicit)
+                                            ?.filterVideoSongs(hideVideoSongs)
+                                            .orEmpty(),
+                                    )
+                                }
+                        }
                     }
                 }.collect {
                     _viewState.value = it

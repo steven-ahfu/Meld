@@ -1,7 +1,7 @@
 <div align="center">
 <img src="fastlane/metadata/android/en-US/images/icon.png" width="160" height="160" style="display: block; margin: 0 auto"/>
 <h1>Meld</h1>
-<p>A music client that fuses Spotify and YouTube Music into one seamless experience</p>
+<p>A music client that brings Spotify, SoundCloud, and YouTube Music into one seamless experience</p>
 
 [![Latest release](https://img.shields.io/github/v/release/FrancescoGrazioso/Meld?style=for-the-badge)](https://github.com/FrancescoGrazioso/Meld/releases/latest)
 [![GitHub license](https://img.shields.io/github/license/FrancescoGrazioso/Meld?style=for-the-badge)](https://github.com/FrancescoGrazioso/Meld/blob/main/LICENSE)
@@ -36,6 +36,14 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 - **Spotify album browsing** — Dedicated album screen for Spotify albums with full tracklist, metadata, and one-tap playback
 - **Hybrid profile cache** — 3-tier data strategy (GraphQL → REST API → local DB) with persistent caching for instant home screen loading on app restart, automatic rate-limit handling, and parallel artist image enrichment
 - **Artist navigation** — Tap any Spotify artist on the home screen to navigate directly to their YouTube Music artist page
+
+### SoundCloud Integration
+- **SoundCloud login** — OAuth login flow with persisted access and refresh tokens
+- **SoundCloud as search source** — Search tracks, artists, and playlists directly from Meld's existing online search UI
+- **SoundCloud library** — Browse your profile, liked tracks, playlists, and followed artists
+- **SoundCloud home source** — Optional home sections for liked tracks, playlists, and followed artists
+- **Native SoundCloud playback** — Resolve SoundCloud stream URLs inside Meld's player stack, including queue handoff and playback recovery after app restart
+- **SoundCloud detail screens** — Open SoundCloud artists and playlists without leaving Meld
 
 ### Core Music Features
 - Play any song or video from YouTube Music
@@ -105,6 +113,22 @@ Meld connects to your Spotify account through a built-in WebView login — no de
 6. Go back to the home screen and **pull down to refresh**. Your Spotify playlists, top tracks, and recommendations should appear within a few seconds.
 
 > **Note:** No developer account, Client ID, or any external setup is required. Just log in with your regular Spotify account — free or Premium.
+
+### SoundCloud Integration
+
+1. In Meld, go to **Settings → Integrations → SoundCloud**
+2. Tap **Login** and complete the SoundCloud OAuth flow
+3. Once logged in, enable **"Use SoundCloud for Search"**, **"Use SoundCloud for Library"**, and/or **"Use SoundCloud for Home"** as needed
+4. Return to the relevant surface and refresh. Search, Library, and Home will switch to SoundCloud-backed content where enabled
+
+> **Note:** SoundCloud support uses Meld's existing UI and player stack. Search and library flows are provider-aware; playback stays inside Meld.
+
+### SoundCloud Maintainer Notes
+
+- Supported today: login, token persistence, search, profile/library loading, artist screens, playlist screens, home sections, playback queue handoff, cast stream URL resolution, and playback recovery for SoundCloud media IDs.
+- Login works through SoundCloud OAuth and persists access/refresh tokens in DataStore so sessions survive app restarts.
+- Current limitations: no dedicated SoundCloud album model, no SoundCloud-specific long-press menus on generic home tiles, and home content is limited to real SoundCloud signals already exposed by the API.
+- If you reuse or modify the SoundCloud integration, preserve Meld's GPL notices and keep attribution to the upstream SoundCrowd project for adapted SoundCloud auth/API logic.
 
 > **Important:** For reliable playback, disable battery optimization for Meld in your phone settings (**Settings → Apps → Meld → Battery → Unrestricted**). Without this, Android may throttle the app and cause long delays before songs start playing.
 
@@ -203,6 +227,7 @@ Meld is a fork of [Metrolist](https://github.com/MetrolistGroup/Metrolist), orig
 - [**SimpMusic Lyrics**](https://github.com/maxrave-dev/SimpMusic) — Lyrics data through the SimpMusic Lyrics API
 - [**metroserver**](https://github.com/MetrolistGroup/metroserver) — Listen Together implementation
 - [**MusicRecognizer**](https://github.com/aleksey-saenko/MusicRecognizer) — Music recognition and Shazam API integration
+- [**SoundCrowd**](https://github.com/soundcrowd/soundcrowd) — Reference implementation for adapted SoundCloud auth, API, and playback behavior
 
 ## Disclaimer
 

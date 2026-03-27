@@ -7,6 +7,7 @@ package com.metrolist.music.ui.component
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
@@ -83,8 +89,30 @@ fun WavySlider(
         .fillMaxWidth()
         .height(containerHeight)
 
+    val seekStep = (valueRange.endInclusive - valueRange.start) * 0.05f
+
     val interactiveModifier = if (enabled) {
         baseModifier
+            .focusable()
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown) {
+                    when (event.key) {
+                        Key.DirectionLeft -> {
+                            val newValue = (value - seekStep).coerceIn(valueRange.start, valueRange.endInclusive)
+                            onValueChange(newValue)
+                            onValueChangeFinished?.invoke()
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            val newValue = (value + seekStep).coerceIn(valueRange.start, valueRange.endInclusive)
+                            onValueChange(newValue)
+                            onValueChangeFinished?.invoke()
+                            true
+                        }
+                        else -> false
+                    }
+                } else false
+            }
             .pointerInput(valueRange) {
                 detectTapGestures { offset ->
                     val newValue = (offset.x / size.width).coerceIn(0f, 1f)

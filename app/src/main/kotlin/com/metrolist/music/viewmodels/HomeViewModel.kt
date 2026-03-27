@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.AlbumItem
 import com.metrolist.innertube.models.Artist
+import com.metrolist.innertube.models.ArtistItem
 import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.innertube.models.SongItem
 import kotlinx.coroutines.flow.combine
@@ -24,6 +25,7 @@ import com.metrolist.innertube.models.filterYoutubeShorts
 import com.metrolist.innertube.pages.ExplorePage
 import com.metrolist.innertube.pages.HomePage
 import com.metrolist.innertube.utils.completed
+import com.metrolist.music.constants.EnableSoundCloudKey
 import com.metrolist.music.constants.EnableSpotifyKey
 import com.metrolist.music.constants.SpotifyHomeOnlyKey
 import com.metrolist.music.constants.HideExplicitKey
@@ -33,9 +35,12 @@ import com.metrolist.music.constants.InnerTubeCookieKey
 import com.metrolist.music.constants.QuickPicks
 import com.metrolist.music.constants.QuickPicksKey
 import com.metrolist.music.constants.ShowWrappedCardKey
+import com.metrolist.music.constants.SoundCloudAccessTokenKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
+import com.metrolist.music.utils.SoundCloudTokenManager
 import com.metrolist.music.utils.SpotifyTokenManager
 import com.metrolist.music.constants.SpotifyTokenExpiryKey
+import com.metrolist.music.constants.UseSoundCloudHomeKey
 import com.metrolist.music.constants.UseSpotifyHomeKey
 import com.metrolist.music.constants.WrappedSeenKey
 import com.metrolist.music.db.MusicDatabase
@@ -55,8 +60,14 @@ import com.metrolist.music.utils.SyncUtils
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
 import com.metrolist.music.playback.SpotifyProfileCache
+import com.metrolist.music.utils.toArtistItem
+import com.metrolist.music.utils.toPlaylistItem
+import com.metrolist.music.utils.toSongItem
+import com.metrolist.music.utils.toTrackDtoOrNull
 import com.metrolist.music.utils.reportException
 import com.metrolist.spotify.Spotify
+import com.metrolist.soundcloud.SoundCloud
+import com.metrolist.soundcloud.models.SoundCloudTrackDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +95,14 @@ data class DailyDiscoverItem(
 data class CommunityPlaylistItem(
     val playlist: PlaylistItem,
     val songs: List<SongItem>
+)
+
+data class SoundCloudHomeSection(
+    val title: String,
+    val type: SectionType,
+    val tracks: List<SongItem> = emptyList(),
+    val artists: List<ArtistItem> = emptyList(),
+    val playlists: List<PlaylistItem> = emptyList(),
 )
 
 @HiltViewModel
@@ -243,15 +262,27 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun soundCloudTrack(songId: String): SoundCloudTrackDto? = soundCloudTrackMap[songId]
+
+    fun soundCloudTracks(songIds: List<String>): List<SoundCloudTrackDto> =
+        songIds.mapNotNull(soundCloudTrackMap::get)
+
     val accountName = MutableStateFlow("Guest")
     val accountImageUrl = MutableStateFlow<String?>(null)
 
     // Spotify home sections: populated when UseSpotifyHomeKey is enabled
     val spotifyHomeSections = MutableStateFlow<List<SpotifyHomeSection>?>(null)
+    val soundCloudHomeSections = MutableStateFlow<List<SoundCloudHomeSection>?>(null)
     val useSpotifyHome: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
         val enabled = prefs[EnableSpotifyKey] ?: false
         val useForHome = prefs[UseSpotifyHomeKey] ?: false
         val hasToken = (prefs[SpotifyAccessTokenKey] ?: "").isNotEmpty()
+        enabled && useForHome && hasToken
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Lazily, false)
+    val useSoundCloudHome: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
+        val enabled = prefs[EnableSoundCloudKey] ?: false
+        val useForHome = prefs[UseSoundCloudHomeKey] ?: false
+        val hasToken = (prefs[SoundCloudAccessTokenKey] ?: "").isNotEmpty()
         enabled && useForHome && hasToken
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Lazily, false)
 
@@ -279,6 +310,8 @@ class HomeViewModel @Inject constructor(
     val wrappedSeen: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[WrappedSeenKey] ?: false
     }.stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    private val soundCloudTrackMap = mutableMapOf<String, SoundCloudTrackDto>()
 
     fun togglePin(item: YTItem) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -500,8 +533,12 @@ class HomeViewModel @Inject constructor(
         val spotifyUseForHome = prefs[UseSpotifyHomeKey] ?: false
         val spotifyHomeOnlyPref = prefs[SpotifyHomeOnlyKey] ?: false
         val spotifyHasToken = (prefs[SpotifyAccessTokenKey] ?: "").isNotEmpty()
+        val soundCloudEnabled = prefs[EnableSoundCloudKey] ?: false
+        val soundCloudUseForHome = prefs[UseSoundCloudHomeKey] ?: false
+        val soundCloudHasToken = (prefs[SoundCloudAccessTokenKey] ?: "").isNotEmpty()
         val isSpotifyHome = spotifyEnabled && spotifyUseForHome && spotifyHasToken
         val isSpotifyOnly = isSpotifyHome && spotifyHomeOnlyPref
+        val isSoundCloudHome = soundCloudEnabled && soundCloudUseForHome && soundCloudHasToken
 
         // Local play history — always loaded regardless of Spotify mode
         recentlyPlayed.value = database.events().first()
@@ -597,10 +634,13 @@ class HomeViewModel @Inject constructor(
         }
 
         // Load remote content: Spotify or YouTube depending on preference
-        if (isSpotifyHome && SpotifyTokenManager.ensureAuthenticated()) {
+        if (isSoundCloudHome) {
+            loadSoundCloudHomeSections()
+        } else if (isSpotifyHome && SpotifyTokenManager.ensureAuthenticated()) {
             loadSpotifyHomeSections(hideExplicit)
         } else if (!isSpotifyOnly) {
             spotifyHomeSections.value = null
+            soundCloudHomeSections.value = null
 
             YouTube.home().onSuccess { page ->
                 homePage.value = page.copy(
@@ -625,8 +665,19 @@ class HomeViewModel @Inject constructor(
         if (!isSpotifyOnly) {
             allLocalItems.value = (quickPicks.value.orEmpty() + forgottenFavorites.value.orEmpty() + keepListening.value.orEmpty())
                 .filter { it is Song || it is Album }
-            allYtItems.value = similarRecommendations.value?.flatMap { it.items }.orEmpty() +
+            allYtItems.value = if (isSoundCloudHome) {
+                soundCloudHomeSections.value.orEmpty().flatMap { section ->
+                    when (section.type) {
+                        SectionType.TRACKS -> section.tracks
+                        SectionType.ARTISTS -> section.artists
+                        SectionType.PLAYLISTS -> section.playlists
+                        else -> emptyList()
+                    }
+                }
+            } else {
+                similarRecommendations.value?.flatMap { it.items }.orEmpty() +
                     homePage.value?.sections?.flatMap { it.items }.orEmpty()
+            }
         }
 
         isLoading.value = false
@@ -710,8 +761,10 @@ class HomeViewModel @Inject constructor(
                 }
 
             similarRecommendations.value = (artistRecommendations + songRecommendations + albumRecommendations).shuffled()
-            allYtItems.value = similarRecommendations.value?.flatMap { it.items }.orEmpty() +
-                    homePage.value?.sections?.flatMap { it.items }.orEmpty()
+            if (!isSoundCloudHome) {
+                allYtItems.value = similarRecommendations.value?.flatMap { it.items }.orEmpty() +
+                        homePage.value?.sections?.flatMap { it.items }.orEmpty()
+            }
         }
     }
 
@@ -828,6 +881,88 @@ class HomeViewModel @Inject constructor(
         // Clear YouTube-specific content when using Spotify home
         homePage.value = null
         explorePage.value = null
+        soundCloudHomeSections.value = null
+    }
+
+    private suspend fun loadSoundCloudHomeSections() {
+        if (!SoundCloudTokenManager.ensureAuthenticated()) {
+            Timber.w("HomeVM: SoundCloud auth failed, skipping SoundCloud home sections")
+            return
+        }
+        val sections = mutableListOf<SoundCloudHomeSection>()
+
+        try {
+            val likesPage = SoundCloud.likes().getOrThrow()
+            val streamPage = SoundCloud.stream().getOrThrow()
+            val selfPlaylistsPage = SoundCloud.selfPlaylists().getOrThrow()
+            val likedPlaylistsPage = SoundCloud.playlists().getOrThrow()
+            val followingsPage = SoundCloud.followings().getOrThrow()
+
+            soundCloudTrackMap.clear()
+
+            val likedTracks = likesPage.collection.mapNotNull { like ->
+                val track = like.track?.takeIf { it.streamable }
+                    ?: like.origin?.toTrackDtoOrNull()?.takeIf { it.streamable }
+
+                track?.also { soundCloudTrackMap[it.toSongItem().id] = it }?.toSongItem()
+            }.distinctBy { it.id }
+
+            if (likedTracks.isNotEmpty()) {
+                sections += SoundCloudHomeSection(
+                    title = "soundcloud_liked_tracks",
+                    type = SectionType.TRACKS,
+                    tracks = likedTracks.take(24),
+                )
+            }
+
+            val repostedTracks = streamPage.collection.mapNotNull { activity ->
+                val track = activity.origin?.toTrackDtoOrNull()?.takeIf { it.streamable }
+                    ?: activity.track?.takeIf { it.streamable }
+
+                track?.also { soundCloudTrackMap[it.toSongItem().id] = it }?.toSongItem()
+            }.distinctBy { it.id }
+
+            if (repostedTracks.isNotEmpty()) {
+                sections += SoundCloudHomeSection(
+                    title = "soundcloud_reposted_tracks",
+                    type = SectionType.TRACKS,
+                    tracks = repostedTracks.take(24),
+                )
+            }
+
+            val playlists = (selfPlaylistsPage.collection + likedPlaylistsPage.collection)
+                .distinctBy { it.id }
+                .map { it.toPlaylistItem() }
+
+            if (playlists.isNotEmpty()) {
+                sections += SoundCloudHomeSection(
+                    title = "soundcloud_playlists",
+                    type = SectionType.PLAYLISTS,
+                    playlists = playlists.take(24),
+                )
+            }
+
+            val artists = followingsPage.collection
+                .distinctBy { it.id }
+                .map { it.toArtistItem() }
+
+            if (artists.isNotEmpty()) {
+                sections += SoundCloudHomeSection(
+                    title = "soundcloud_following",
+                    type = SectionType.ARTISTS,
+                    artists = artists.take(24),
+                )
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "HomeVM: Failed to load SoundCloud home sections")
+            reportException(e)
+        }
+
+        soundCloudHomeSections.value = sections.ifEmpty { null }
+        spotifyHomeSections.value = null
+        homePage.value = null
+        explorePage.value = null
+        selectedChip.value = null
     }
 
 
@@ -969,6 +1104,20 @@ class HomeViewModel @Inject constructor(
                 .first()
 
             load()
+        }
+
+        // Reload SC home sections when SoundCloud login state changes
+        viewModelScope.launch(Dispatchers.IO) {
+            var prev = ""
+            context.dataStore.data
+                .map { it[SoundCloudAccessTokenKey].orEmpty() }
+                .distinctUntilChanged()
+                .collect { token: String ->
+                    if (prev.isBlank() && token.isNotBlank()) {
+                        loadSoundCloudHomeSections()
+                    }
+                    prev = token
+                }
         }
 
         // Run sync in separate coroutine with cooldown to avoid blocking UI

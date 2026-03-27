@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.component
 
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Spacer
@@ -21,8 +22,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.painterResource
@@ -58,13 +66,24 @@ fun AppNavigationRail(
     val containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer
     val haptics = LocalHapticFeedback.current
     val viewConfiguration = LocalViewConfiguration.current
-    
+    val focusManager = LocalFocusManager.current
+
+    // D-pad RIGHT from any rail item escapes into the content area
+    val dpadRightModifier = Modifier.onPreviewKeyEvent { event ->
+        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+            focusManager.moveFocus(FocusDirection.Right) ||
+                focusManager.moveFocus(FocusDirection.Next)
+        } else {
+            false
+        }
+    }
+
     NavigationRail(
         modifier = modifier,
         containerColor = containerColor
     ) {
         Spacer(modifier = Modifier.weight(1f))
-        
+
         navigationItems.forEach { screen ->
             val isSelected = remember(currentRoute, screen.route) {
                 isRouteSelected(currentRoute, screen.route, navigationItems)
@@ -72,10 +91,10 @@ fun AppNavigationRail(
             val iconRes = remember(isSelected, screen) {
                 if (isSelected) screen.iconIdActive else screen.iconIdInactive
             }
-            
+
             val isSearchItem = screen == Screens.Search && onSearchLongClick != null
             val interactionSource = remember { MutableInteractionSource() }
-            
+
             // Long press detection using InteractionSource
             if (isSearchItem) {
                 LaunchedEffect(interactionSource) {
@@ -101,10 +120,10 @@ fun AppNavigationRail(
                     }
                 }
             }
-            
+
             NavigationRailItem(
                 selected = isSelected,
-                onClick = { 
+                onClick = {
                     if (!isSearchItem) {
                         onItemClick(screen, isSelected)
                     }
@@ -116,10 +135,11 @@ fun AppNavigationRail(
                         painter = painterResource(id = iconRes),
                         contentDescription = stringResource(screen.titleId)
                     )
-                }
+                },
+                modifier = dpadRightModifier,
             )
         }
-        
+
         Spacer(modifier = Modifier.weight(1f))
     }
 }

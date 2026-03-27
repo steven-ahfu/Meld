@@ -45,7 +45,14 @@
 
     <!-- Search -->
     <string name="search">Search</string>
+    <string name="search_soundcloud">Search SoundCloud…</string>
     <string name="search_yt_music">Search YouTube Music…</string>
+    <string name="soundcloud_library_title">Your SoundCloud</string>
+    <string name="soundcloud_library_empty">Your SoundCloud library is empty.</string>
+    <string name="soundcloud_liked_tracks">Liked Tracks</string>
+    <string name="soundcloud_reposted_tracks">Reposted Tracks</string>
+    <string name="soundcloud_following">Following</string>
+    <string name="load_more">Load more</string>
     <string name="search_library">Search library…</string>
     <string name="filter_library">Library</string>
     <string name="filter_liked">Liked</string>

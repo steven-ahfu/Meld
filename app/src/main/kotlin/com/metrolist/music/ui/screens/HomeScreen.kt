@@ -10,6 +10,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -137,6 +138,7 @@ import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.queues.ListQueue
 import com.metrolist.music.playback.queues.LocalAlbumRadio
+import com.metrolist.music.playback.queues.SoundCloudQueue
 import com.metrolist.music.playback.queues.YouTubeAlbumRadio
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.R
@@ -175,6 +177,7 @@ import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import com.metrolist.music.ui.menu.YouTubeSongMenu
 import com.metrolist.music.ui.utils.SnapLayoutInfoProvider
 import com.metrolist.music.utils.isSpotifyId
+import com.metrolist.music.utils.isSoundCloudId
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.utils.stripSpotifyPrefix
@@ -606,6 +609,8 @@ fun HomeScreen(
     val spotifyHomeSections by viewModel.spotifyHomeSections.collectAsState()
     val isSpotifyHome by viewModel.useSpotifyHome.collectAsState()
     val isSpotifyHomeOnly by viewModel.spotifyHomeOnly.collectAsState()
+    val soundCloudHomeSections by viewModel.soundCloudHomeSections.collectAsState()
+    val isSoundCloudHome by viewModel.useSoundCloudHome.collectAsState()
     val pinnedSpeedDialIds by viewModel.pinnedSpeedDialIds.collectAsState()
     val spotifyMapper = remember { SpotifyYouTubeMapper(database) }
 
@@ -749,6 +754,46 @@ fun HomeScreen(
         }
     }
 
+    val playHomeItem: (YTItem) -> Unit = { item ->
+        when (item) {
+            is SongItem -> {
+                if (item.id.isSoundCloudId()) {
+                    viewModel.soundCloudTrack(item.id)?.let { track ->
+                        playerConnection.playQueue(SoundCloudQueue(tracks = listOf(track), title = item.title))
+                    }
+                } else {
+                    playerConnection.playQueue(
+                        YouTubeQueue(
+                            item.endpoint ?: WatchEndpoint(videoId = item.id),
+                            item.toMediaMetadata()
+                        )
+                    )
+                }
+            }
+
+            is AlbumItem -> navController.navigate("album/${item.id}")
+            is ArtistItem -> navController.navigate("artist/${item.id}")
+            is PlaylistItem -> navigateToPlaylist(item.id)
+            is PodcastItem -> navController.navigate("online_podcast/${item.id}")
+            is EpisodeItem -> playerConnection.playQueue(
+                ListQueue(
+                    title = item.title,
+                    items = listOf(item.toMediaMetadata().toMediaItem())
+                )
+            )
+        }
+    }
+
+    val resolveSoundCloudHomeTitle: (String) -> String = { title ->
+        when (title) {
+            "soundcloud_liked_tracks" -> viewModel.context.getString(R.string.soundcloud_liked_tracks)
+            "soundcloud_reposted_tracks" -> viewModel.context.getString(R.string.soundcloud_reposted_tracks)
+            "soundcloud_playlists" -> viewModel.context.getString(R.string.playlists)
+            "soundcloud_following" -> viewModel.context.getString(R.string.soundcloud_following)
+            else -> title
+        }
+    }
+
     val localGridItem: @Composable (LocalItem) -> Unit = {
         when (it) {
             is Song -> SongGridItem(
@@ -842,28 +887,7 @@ fun HomeScreen(
             thumbnailRatio = 1f,
             modifier = Modifier
                 .combinedClickable(
-                    onClick = {
-                        when (item) {
-                            is SongItem -> playerConnection.playQueue(
-                                YouTubeQueue(
-                                    item.endpoint ?: WatchEndpoint(
-                                        videoId = item.id
-                                    ), item.toMediaMetadata()
-                                )
-                            )
-
-                            is AlbumItem -> navController.navigate("album/${item.id}")
-                            is ArtistItem -> navController.navigate("artist/${item.id}")
-                            is PlaylistItem -> navigateToPlaylist(item.id)
-                            is PodcastItem -> navController.navigate("online_podcast/${item.id}")
-                            is EpisodeItem -> playerConnection.playQueue(
-                                ListQueue(
-                                    title = item.title,
-                                    items = listOf(item.toMediaMetadata().toMediaItem())
-                                )
-                            )
-                        }
-                    },
+                    onClick = { playHomeItem(item) },
                     onLongClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         menuState.show {
@@ -1067,7 +1091,8 @@ fun HomeScreen(
 
             LazyColumn(
                 state = lazylistState,
-                contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues()
+                contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
+                modifier = Modifier.focusable(),
             ) {
                 item {
                     ChipsRow(
@@ -1356,24 +1381,7 @@ fun HomeScreen(
                                                                                 randomizeJob = scope.launch {
                                                                                     val randomItem = viewModel.getRandomItem()
                                                                                     if (randomItem != null) {
-                                                                                        when (randomItem) {
-                                                                                            is SongItem -> playerConnection.playQueue(
-                                                                                                YouTubeQueue(
-                                                                                                    randomItem.endpoint ?: WatchEndpoint(videoId = randomItem.id),
-                                                                                                    randomItem.toMediaMetadata()
-                                                                                                )
-                                                                                            )
-                                                                                            is AlbumItem -> navController.navigate("album/${randomItem.id}")
-                                                                                            is ArtistItem -> navController.navigate("artist/${randomItem.id}")
-                                                                                            is PlaylistItem -> navigateToPlaylist(randomItem.id)
-                                                                                            is PodcastItem -> navController.navigate("online_podcast/${randomItem.id}")
-                                                                                            is EpisodeItem -> playerConnection.playQueue(
-                                                                                                ListQueue(
-                                                                                                    title = randomItem.title,
-                                                                                                    items = listOf(randomItem.toMediaMetadata().toMediaItem())
-                                                                                                )
-                                                                                            )
-                                                                                        }
+                                                                                        playHomeItem(randomItem)
                                                                                     }
                                                                                 }
                                                                             }
@@ -1398,26 +1406,7 @@ fun HomeScreen(
                                                                         modifier = Modifier
                                                                             .fillMaxSize()
                                                                             .combinedClickable(
-                                                                                onClick = {
-                                                                                    when (item) {
-                                                                                        is SongItem -> playerConnection.playQueue(
-                                                                                            YouTubeQueue(
-                                                                                                item.endpoint ?: WatchEndpoint(videoId = item.id),
-                                                                                                item.toMediaMetadata()
-                                                                                            )
-                                                                                        )
-                                                                                        is AlbumItem -> navController.navigate("album/${item.id}")
-                                                                                        is ArtistItem -> navController.navigate("artist/${item.id}")
-                                                                                        is PlaylistItem -> navigateToPlaylist(item.id)
-                                                                                        is PodcastItem -> navController.navigate("online_podcast/${item.id}")
-                                                                                        is EpisodeItem -> playerConnection.playQueue(
-                                                                                            ListQueue(
-                                                                                                title = item.title,
-                                                                                                items = listOf(item.toMediaMetadata().toMediaItem())
-                                                                                            )
-                                                                                        )
-                                                                                    }
-                                                                                },
+                                                                                onClick = { playHomeItem(item) },
                                                                                 onLongClick = {
                                                                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                                                     menuState.show {
@@ -2277,6 +2266,79 @@ fun HomeScreen(
                     }
                 }
 
+                if (isSoundCloudHome && soundCloudHomeSections != null) {
+                    soundCloudHomeSections?.forEachIndexed { index, section ->
+                        item(key = "soundcloud_section_title_$index") {
+                            NavigationTitle(
+                                title = resolveSoundCloudHomeTitle(section.title),
+                                onPlayAllClick = if (section.type == SectionType.TRACKS && section.tracks.isNotEmpty()) {
+                                    {
+                                        val tracks = viewModel.soundCloudTracks(section.tracks.map { it.id })
+                                        if (tracks.isNotEmpty()) {
+                                            playerConnection.playQueue(
+                                                SoundCloudQueue(
+                                                    tracks = tracks,
+                                                    title = resolveSoundCloudHomeTitle(section.title)
+                                                )
+                                            )
+                                        }
+                                    }
+                                } else null,
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+
+                        item(key = "soundcloud_section_content_$index") {
+                            val sectionItems = when (section.type) {
+                                SectionType.TRACKS -> section.tracks
+                                SectionType.ARTISTS -> section.artists
+                                SectionType.PLAYLISTS -> section.playlists
+                                else -> emptyList()
+                            }
+
+                            LazyRow(
+                                contentPadding = WindowInsets.systemBars
+                                    .only(WindowInsetsSides.Horizontal)
+                                    .asPaddingValues(),
+                                modifier = Modifier.animateItem()
+                            ) {
+                                items(
+                                    items = sectionItems,
+                                    key = { it.id }
+                                ) { sectionItem ->
+                                    YouTubeGridItem(
+                                        item = sectionItem,
+                                        isActive = sectionItem.id in listOf(mediaMetadata?.album?.id, mediaMetadata?.id),
+                                        isPlaying = isPlaying,
+                                        coroutineScope = scope,
+                                        thumbnailRatio = 1f,
+                                        modifier = Modifier.combinedClickable(
+                                            onClick = {
+                                                if (sectionItem is SongItem && sectionItem.id.isSoundCloudId()) {
+                                                    val tracks = viewModel.soundCloudTracks(section.tracks.map { it.id })
+                                                    val startIndex = section.tracks.indexOfFirst { it.id == sectionItem.id }
+                                                        .takeIf { it >= 0 } ?: 0
+                                                    if (tracks.isNotEmpty()) {
+                                                        playerConnection.playQueue(
+                                                            SoundCloudQueue(
+                                                                tracks = tracks,
+                                                                title = resolveSoundCloudHomeTitle(section.title),
+                                                                startIndex = startIndex
+                                                            )
+                                                        )
+                                                    }
+                                                } else {
+                                                    playHomeItem(sectionItem)
+                                                }
+                                            }
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (isLoading || homePage?.continuation != null && homePage?.sections?.isNotEmpty() == true) {
                     item(key = "loading_shimmer") {
                         ShimmerHost(
@@ -2331,14 +2393,18 @@ fun HomeScreen(
                             }
                         } else {
                             when (val luckyItem = allYtItems.random()) {
-                                is SongItem -> playerConnection.playQueue(YouTubeQueue.radio(luckyItem.toMediaMetadata()))
+                                is SongItem -> {
+                                    if (luckyItem.id.isSoundCloudId()) {
+                                        viewModel.soundCloudTrack(luckyItem.id)?.let { track ->
+                                            playerConnection.playQueue(SoundCloudQueue(tracks = listOf(track), title = luckyItem.title))
+                                        }
+                                    } else {
+                                        playerConnection.playQueue(YouTubeQueue.radio(luckyItem.toMediaMetadata()))
+                                    }
+                                }
                                 is AlbumItem -> playerConnection.playQueue(YouTubeAlbumRadio(luckyItem.playlistId))
-                                is ArtistItem -> luckyItem.radioEndpoint?.let {
-                                    playerConnection.playQueue(YouTubeQueue(it))
-                                }
-                                is PlaylistItem -> luckyItem.playEndpoint?.let {
-                                    playerConnection.playQueue(YouTubeQueue(it))
-                                }
+                                is ArtistItem -> navController.navigate("artist/${luckyItem.id}")
+                                is PlaylistItem -> navigateToPlaylist(luckyItem.id)
                                 is PodcastItem -> luckyItem.playEndpoint?.let {
                                     playerConnection.playQueue(YouTubeQueue(it))
                                 }

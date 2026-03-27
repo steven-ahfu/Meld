@@ -33,8 +33,10 @@ import com.metrolist.music.di.ApplicationScope
 import com.metrolist.music.extensions.toEnum
 import com.metrolist.music.extensions.toInetSocketAddress
 import com.metrolist.music.utils.CrashHandler
+import com.metrolist.music.utils.SoundCloudTokenManager
 import com.metrolist.music.utils.SpotifyHashSync
 import com.metrolist.music.utils.SpotifyTokenManager
+import com.metrolist.soundcloud.SoundCloud
 import com.metrolist.music.utils.cipher.PlayerJsFetcher
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.reportException
@@ -130,6 +132,38 @@ class App : Application(), SingletonImageLoader.Factory {
             SpotifyTokenManager.ensureAuthenticated()
         }
 
+        SoundCloud.logger = { level, message ->
+            when (level) {
+                "E" -> Timber.tag("SoundCloudAPI").e(message)
+                "W" -> Timber.tag("SoundCloudAPI").w(message)
+                else -> Timber.tag("SoundCloudAPI").d(message)
+            }
+        }
+        SoundCloud.accessToken = settings[SoundCloudAccessTokenKey]?.takeIf { it.isNotBlank() }
+        SoundCloud.refreshToken = settings[SoundCloudRefreshTokenKey]?.takeIf { it.isNotBlank() }
+        SoundCloud.userId = settings[SoundCloudUserIdKey]?.takeIf { it.isNotBlank() }
+        val storedScClientId = (settings[SoundCloudClientIdKey]?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.SOUNDCLOUD_CLIENT_ID).takeIf { it.isNotBlank() }
+        SoundCloud.clientId = storedScClientId
+        SoundCloudTokenManager.init(
+            dataStore = dataStore,
+            clientId = storedScClientId.orEmpty(),
+        )
+        applicationScope.launch(Dispatchers.IO) {
+            // If no stored token but BuildConfig credentials are provided, try them
+            if (SoundCloud.accessToken == null &&
+                BuildConfig.SOUNDCLOUD_CLIENT_ID.isNotBlank() &&
+                BuildConfig.SOUNDCLOUD_CLIENT_SECRET.isNotBlank()
+            ) {
+                SoundCloudTokenManager.tryBuildConfigCredentials(
+                    clientId = BuildConfig.SOUNDCLOUD_CLIENT_ID,
+                    clientSecret = BuildConfig.SOUNDCLOUD_CLIENT_SECRET,
+                )
+            } else {
+                SoundCloudTokenManager.ensureAuthenticated()
+            }
+        }
+
         if (settings[ProxyEnabledKey] == true) {
             val username = settings[ProxyUsernameKey].orEmpty()
             val password = settings[ProxyPasswordKey].orEmpty()
@@ -222,6 +256,17 @@ class App : Application(), SingletonImageLoader.Factory {
                     } catch (e: Exception) {
                         Timber.e("Error while loading last.fm session key. %s", e.message)
                     }
+                }
+        }
+
+        applicationScope.launch(Dispatchers.IO) {
+            dataStore.data
+                .map { Triple(it[SoundCloudAccessTokenKey], it[SoundCloudRefreshTokenKey], it[SoundCloudUserIdKey]) }
+                .distinctUntilChanged()
+                .collect { (accessToken, refreshToken, scUserId) ->
+                    SoundCloud.accessToken = accessToken?.takeIf { it.isNotBlank() }
+                    SoundCloud.refreshToken = refreshToken?.takeIf { it.isNotBlank() }
+                    SoundCloud.userId = scUserId?.takeIf { it.isNotBlank() }
                 }
         }
 

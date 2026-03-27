@@ -13,6 +13,7 @@ import androidx.media3.common.Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM
 import androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
 import androidx.media3.common.Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
 import androidx.media3.common.Player.REPEAT_MODE_OFF
+import androidx.media3.common.Player.STATE_BUFFERING
 import androidx.media3.common.Player.STATE_ENDED
 import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
@@ -79,6 +80,7 @@ class PlayerConnection(
     val playbackState: MutableStateFlow<Int>
     private val playWhenReady: MutableStateFlow<Boolean>
     val isPlaying: kotlinx.coroutines.flow.StateFlow<Boolean>
+    val isBuffering: kotlinx.coroutines.flow.StateFlow<Boolean>
     
     init {
         Timber.tag(TAG).d("PlayerConnection init: playerReady=${playerReadinessFlow.value}")
@@ -102,7 +104,14 @@ class PlayerConnection(
             SharingStarted.Lazily,
             initialState.third
         )
-        
+        isBuffering = combine(playbackState, playWhenReady) { state, ready ->
+            ready && state == STATE_BUFFERING
+        }.stateIn(
+            scope,
+            SharingStarted.Lazily,
+            initialState.first == Player.STATE_BUFFERING && initialState.second
+        )
+
         // Track service readiness changes in background.
         scope.launch {
             playerReadinessFlow.collect { ready ->

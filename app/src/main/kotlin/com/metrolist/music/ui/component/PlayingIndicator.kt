@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -90,6 +92,7 @@ fun PlayingIndicatorBox(
     modifier: Modifier = Modifier,
     isActive: Boolean,
     playWhenReady: Boolean,
+    isBuffering: Boolean = false,
     color: Color = Color.White,
 ) {
     AnimatedVisibility(
@@ -102,10 +105,18 @@ fun PlayingIndicatorBox(
             modifier = modifier,
         ) {
             if (playWhenReady) {
-                PlayingIndicator(
-                    color = color,
-                    modifier = Modifier.height(24.dp),
-                )
+                if (isBuffering) {
+                    CircularProgressIndicator(
+                        color = color,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(24.dp),
+                    )
+                } else {
+                    PlayingIndicator(
+                        color = color,
+                        modifier = Modifier.height(24.dp),
+                    )
+                }
             } else {
                 Icon(
                     painter = painterResource(R.drawable.play),

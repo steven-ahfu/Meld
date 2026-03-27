@@ -62,7 +62,10 @@ import androidx.media3.exoplayer.analytics.PlaybackStats
 import androidx.media3.exoplayer.analytics.PlaybackStatsListener
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.session.CommandButton
@@ -168,12 +171,16 @@ import com.metrolist.music.utils.DiscordRPC
 import com.metrolist.music.utils.NetworkConnectivityObserver
 import com.metrolist.music.utils.ScrobbleManager
 import com.metrolist.music.utils.SyncUtils
+import com.metrolist.music.utils.SoundCloudTokenManager
+import com.metrolist.music.utils.isSoundCloudId
+import com.metrolist.music.utils.stripSoundCloudPrefix
 import com.metrolist.music.utils.YTPlayerUtils
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
 import com.metrolist.music.utils.reportException
 import com.metrolist.music.widget.MetrolistWidgetManager
 import com.metrolist.music.widget.MusicWidgetReceiver
+import com.metrolist.soundcloud.SoundCloud
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -1230,6 +1237,7 @@ class MusicService :
         mediaId: String,
         playbackData: YTPlayerUtils.PlaybackData? = null
     ) {
+        if (mediaId.isSoundCloudId()) return
         val song = database.song(mediaId).first()
         val mediaMetadata = withContext(Dispatchers.Main) {
             player.findNextMediaItemById(mediaId)?.metadata
@@ -2371,6 +2379,12 @@ class MusicService :
             performAggressiveCacheClear(mediaId)
         }
 
+        // SoundCloud-specific recovery: re-resolve stream URL and retry
+        if (mediaId != null && mediaId.isSoundCloudId()) {
+            handleSoundCloudError(mediaId)
+            return
+        }
+
         // Handle specific error types with strict strategies
         when {
             isAudioRendererError(error) -> {
@@ -2672,6 +2686,53 @@ class MusicService :
     }
 
     /**
+     * Handles SoundCloud playback errors by re-resolving the stream URL and
+     * replacing the current MediaItem so ExoPlayer picks the correct source.
+     */
+    private fun handleSoundCloudError(mediaId: String) {
+        incrementRetryCount(mediaId)
+
+        retryJob?.cancel()
+        retryJob = scope.launch {
+            performAggressiveCacheClear(mediaId)
+            delay(RETRY_DELAY_MS)
+
+            val trackId = mediaId.stripSoundCloudPrefix()
+            val newUrl = withContext(Dispatchers.IO) {
+                SoundCloudTokenManager.ensureAuthenticated()
+                SoundCloud.preferredStreamUrl(trackId).getOrNull()
+            }
+
+            if (newUrl == null) {
+                Timber.tag(TAG).w("SoundCloud re-resolve failed for $mediaId, skipping")
+                handleFinalFailure()
+                return@launch
+            }
+
+            Timber.tag(TAG).d("SoundCloud re-resolved $mediaId → ${newUrl.take(80)}…")
+
+            val currentIndex = player.currentMediaItemIndex
+            val currentPosition = player.currentPosition
+            val oldItem = player.currentMediaItem ?: run {
+                handleFinalFailure()
+                return@launch
+            }
+
+            // Build a replacement MediaItem with the fresh stream URL
+            val freshItem = oldItem.buildUpon()
+                .setUri(newUrl)
+                .build()
+
+            player.removeMediaItem(currentIndex)
+            player.addMediaItem(currentIndex, freshItem)
+            player.seekTo(currentIndex, currentPosition)
+            player.prepare()
+
+            Timber.tag(TAG).d("Retrying SoundCloud playback for $mediaId with fresh URL")
+        }
+    }
+
+    /**
      * Handles final failure when all recovery attempts have been exhausted.
      */
     private fun handleFinalFailure() {
@@ -2834,6 +2895,11 @@ class MusicService :
                 return@Factory dataSpec
             }
 
+            // SoundCloud uses HLS — handled by HlsMediaSource in createMediaSourceFactory()
+            if (mediaId.isSoundCloudId()) {
+                return@Factory dataSpec
+            }
+
             // Check if we need to bypass cache for quality change
             val shouldBypassCache = bypassCacheForQualityChange.contains(mediaId)
 
@@ -2938,11 +3004,53 @@ class MusicService :
         }
     }
 
-    private fun createMediaSourceFactory() =
-        DefaultMediaSourceFactory(
+    private fun createMediaSourceFactory(): MediaSource.Factory {
+        val defaultFactory = DefaultMediaSourceFactory(
             createDataSourceFactory(),
             DefaultExtractorsFactory(),
         )
+        // SoundCloud streams may be HLS (m3u8) or progressive (direct MP3).
+        // Use a clean data source (no ResolvingDataSource) so HlsMediaSource can
+        // fetch the playlist and segments without interference.
+        val scDataSourceFactory = createCacheDataSource()
+        val hlsFactory = HlsMediaSource.Factory(scDataSourceFactory)
+            .setAllowChunklessPreparation(true)
+        val progressiveFactory = ProgressiveMediaSource.Factory(scDataSourceFactory)
+
+        return object : MediaSource.Factory {
+            override fun setDrmSessionManagerProvider(
+                drmSessionManagerProvider: androidx.media3.exoplayer.drm.DrmSessionManagerProvider,
+            ): MediaSource.Factory {
+                defaultFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
+                hlsFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
+                return this
+            }
+
+            override fun setLoadErrorHandlingPolicy(
+                loadErrorHandlingPolicy: androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy,
+            ): MediaSource.Factory {
+                defaultFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                hlsFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                progressiveFactory.setLoadErrorHandlingPolicy(loadErrorHandlingPolicy)
+                return this
+            }
+
+            override fun getSupportedTypes(): IntArray =
+                defaultFactory.supportedTypes + hlsFactory.supportedTypes
+
+            override fun createMediaSource(mediaItem: MediaItem): MediaSource {
+                if (mediaItem.mediaId.isSoundCloudId()) {
+                    val uri = mediaItem.localConfiguration?.uri?.toString().orEmpty()
+                    return if (uri.contains(".m3u8")) {
+                        hlsFactory.createMediaSource(mediaItem)
+                    } else {
+                        progressiveFactory.createMediaSource(mediaItem)
+                    }
+                }
+                return defaultFactory.createMediaSource(mediaItem)
+            }
+        }
+    }
 
     private fun createRenderersFactory(
         eqProcessor: CustomEqualizerAudioProcessor,
@@ -3221,6 +3329,9 @@ class MusicService :
     suspend fun getStreamUrl(mediaId: String): String? {
         return withContext(Dispatchers.IO) {
             try {
+                if (mediaId.isSoundCloudId()) {
+                    return@withContext SoundCloud.preferredStreamUrl(mediaId.stripSoundCloudPrefix()).getOrNull()
+                }
                 val playbackData = YTPlayerUtils.playerResponseForPlayback(
                     videoId = mediaId,
                     audioQuality = audioQuality,

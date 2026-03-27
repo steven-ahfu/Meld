@@ -62,13 +62,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ALBUM
-import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ARTIST
-import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_COMMUNITY_PLAYLIST
-import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_FEATURED_PLAYLIST
-import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_PODCAST
-import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_SONG
-import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_VIDEO
 import com.metrolist.innertube.models.AlbumItem
 import com.metrolist.innertube.models.ArtistItem
 import com.metrolist.innertube.models.EpisodeItem
@@ -85,12 +78,15 @@ import com.metrolist.music.constants.MiniPlayerHeight
 import com.metrolist.music.constants.NavigationBarHeight
 import com.metrolist.music.constants.PauseSearchHistoryKey
 import com.metrolist.music.db.entities.SearchHistory
+import com.metrolist.music.extensions.togglePlayPause
 import com.metrolist.music.models.toMediaMetadata
+import com.metrolist.music.models.ItemsPage
+import com.metrolist.music.playback.queues.SoundCloudQueue
 import com.metrolist.music.playback.queues.SpotifyQueue
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.component.ChipsRow
-import com.metrolist.music.ui.component.HideOnScrollFAB
 import com.metrolist.music.ui.component.EmptyPlaceholder
+import com.metrolist.music.ui.component.HideOnScrollFAB
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.NavigationTitle
 import com.metrolist.music.ui.component.YouTubeListItem
@@ -100,11 +96,13 @@ import com.metrolist.music.ui.menu.YouTubeAlbumMenu
 import com.metrolist.music.ui.menu.YouTubeArtistMenu
 import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import com.metrolist.music.ui.menu.YouTubeSongMenu
-import com.metrolist.music.utils.rememberPreference
+import com.metrolist.music.utils.isSoundCloudId
 import com.metrolist.music.utils.isSpotifyId
+import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.utils.stripSpotifyPrefix
 import com.metrolist.music.utils.toSpotifyTrackStub
 import com.metrolist.music.viewmodels.OnlineSearchViewModel
+import com.metrolist.music.constants.OnlineProvider
 import com.metrolist.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -131,7 +129,7 @@ fun OnlineSearchResult(
     val focusRequester = remember { FocusRequester() }
 
     var isSearchFocused by remember { mutableStateOf(false) }
-    val isSpotifySearch by viewModel.isSpotifySearch.collectAsState()
+    val enabledProviders by viewModel.enabledProviders.collectAsState()
 
     val pauseSearchHistory by rememberPreference(PauseSearchHistoryKey, defaultValue = false)
 
@@ -183,22 +181,16 @@ fun OnlineSearchResult(
         query = TextFieldValue(decodedQuery, TextRange(decodedQuery.length))
     }
 
-    val searchFilter by viewModel.filter.collectAsState()
-    val spotifyFilterValue by viewModel.spotifyFilter.collectAsState()
+    val activeFilterValue by viewModel.activeFilter.collectAsState()
     val searchSummary = viewModel.summaryPage
 
-    val itemsPage by remember(searchFilter, spotifyFilterValue, isSpotifySearch) {
+    val itemsPage: ItemsPage? by remember(activeFilterValue) {
         derivedStateOf {
-            if (isSpotifySearch) {
-                spotifyFilterValue?.let { viewModel.viewStateMap[it] }
-            } else {
-                searchFilter?.value?.let { viewModel.viewStateMap[it] }
-            }
+            activeFilterValue?.let { viewModel.viewStateMap[it] }
         }
     }
 
-    // Determine active filter state for display
-    val hasActiveFilter = if (isSpotifySearch) spotifyFilterValue != null else searchFilter != null
+    val hasActiveFilter = activeFilterValue != null
 
     LaunchedEffect(lazyListState) {
         snapshotFlow {
@@ -210,50 +202,53 @@ fun OnlineSearchResult(
     }
 
     val ytItemContent: @Composable LazyItemScope.(YTItem) -> Unit = { item: YTItem ->
+        val isSoundCloudItem = item.id.isSoundCloudId()
         val longClick = {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            menuState.show {
-                when (item) {
-                    is SongItem ->
-                        YouTubeSongMenu(
-                            song = item,
-                            navController = navController,
-                            onDismiss = menuState::dismiss,
-                        )
+            if (!isSoundCloudItem) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                menuState.show {
+                    when (item) {
+                        is SongItem ->
+                            YouTubeSongMenu(
+                                song = item,
+                                navController = navController,
+                                onDismiss = menuState::dismiss,
+                            )
 
-                    is AlbumItem ->
-                        YouTubeAlbumMenu(
-                            albumItem = item,
-                            navController = navController,
-                            onDismiss = menuState::dismiss,
-                        )
+                        is AlbumItem ->
+                            YouTubeAlbumMenu(
+                                albumItem = item,
+                                navController = navController,
+                                onDismiss = menuState::dismiss,
+                            )
 
-                    is ArtistItem ->
-                        YouTubeArtistMenu(
-                            artist = item,
-                            onDismiss = menuState::dismiss,
-                        )
+                        is ArtistItem ->
+                            YouTubeArtistMenu(
+                                artist = item,
+                                onDismiss = menuState::dismiss,
+                            )
 
-                    is PlaylistItem ->
-                        YouTubePlaylistMenu(
-                            playlist = item,
-                            coroutineScope = coroutineScope,
-                            onDismiss = menuState::dismiss,
-                        )
+                        is PlaylistItem ->
+                            YouTubePlaylistMenu(
+                                playlist = item,
+                                coroutineScope = coroutineScope,
+                                onDismiss = menuState::dismiss,
+                            )
 
-                    is PodcastItem ->
-                        YouTubePlaylistMenu(
-                            playlist = item.asPlaylistItem(),
-                            coroutineScope = coroutineScope,
-                            onDismiss = menuState::dismiss,
-                        )
+                        is PodcastItem ->
+                            YouTubePlaylistMenu(
+                                playlist = item.asPlaylistItem(),
+                                coroutineScope = coroutineScope,
+                                onDismiss = menuState::dismiss,
+                            )
 
-                    is EpisodeItem ->
-                        YouTubeSongMenu(
-                            song = item.asSongItem(),
-                            navController = navController,
-                            onDismiss = menuState::dismiss,
-                        )
+                        is EpisodeItem ->
+                            YouTubeSongMenu(
+                                song = item.asSongItem(),
+                                navController = navController,
+                                onDismiss = menuState::dismiss,
+                            )
+                    }
                 }
             }
         }
@@ -268,13 +263,15 @@ fun OnlineSearchResult(
             },
             isPlaying = isPlaying,
             trailingContent = {
-                IconButton(
-                    onClick = longClick,
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.more_vert),
-                        contentDescription = null,
-                    )
+                if (!isSoundCloudItem) {
+                    IconButton(
+                        onClick = longClick,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_vert),
+                            contentDescription = null,
+                        )
+                    }
                 }
             },
             modifier =
@@ -285,6 +282,22 @@ fun OnlineSearchResult(
                             is SongItem -> {
                                 if (item.id == mediaMetadata?.id) {
                                     playerConnection.togglePlayPause()
+                                } else if (item.id.isSoundCloudId()) {
+                                    val tracks = viewModel.currentSoundCloudTracks(activeFilterValue)
+                                    val selectedTrack = viewModel.soundCloudTrack(item.id)
+                                    val selectedIndex = selectedTrack?.let { track ->
+                                        tracks.indexOfFirst { it.id == track.id }
+                                    } ?: -1
+                                    if (tracks.isNotEmpty() && selectedIndex >= 0) {
+                                        playerConnection.playQueue(
+                                            SoundCloudQueue(
+                                                tracks = tracks,
+                                                title = item.title,
+                                                startIndex = selectedIndex,
+                                                preloadItem = item.toMediaMetadata(),
+                                            )
+                                        )
+                                    }
                                 } else if (item.id.isSpotifyId()) {
                                     // Spotify search result: create SpotifyQueue
                                     val spotifyTrack = item.toSpotifyTrackStub()
@@ -307,7 +320,9 @@ fun OnlineSearchResult(
                             }
 
                             is AlbumItem -> {
-                                if (item.id.isSpotifyId()) {
+                                if (item.id.isSoundCloudId()) {
+                                    return@combinedClickable
+                                } else if (item.id.isSpotifyId()) {
                                     coroutineScope.launch {
                                         val searchQuery = "${item.title} ${item.artists?.firstOrNull()?.name.orEmpty()}"
                                         val ytResult = YouTube.search(searchQuery, YouTube.SearchFilter.FILTER_ALBUM).getOrNull()
@@ -321,7 +336,9 @@ fun OnlineSearchResult(
                                 }
                             }
                             is ArtistItem -> {
-                                if (item.id.isSpotifyId()) {
+                                if (item.id.isSoundCloudId()) {
+                                    navController.navigate("soundcloud_artist/${item.id.removePrefix("soundcloud:")}")
+                                } else if (item.id.isSpotifyId()) {
                                     coroutineScope.launch {
                                         val ytResult = YouTube.search(item.title, YouTube.SearchFilter.FILTER_ARTIST).getOrNull()
                                         val ytArtist = ytResult?.items?.firstOrNull { it is ArtistItem }
@@ -334,7 +351,9 @@ fun OnlineSearchResult(
                                 }
                             }
                             is PlaylistItem -> {
-                                if (item.id.isSpotifyId()) {
+                                if (item.id.isSoundCloudId()) {
+                                    navController.navigate("soundcloud_playlist/${item.id.removePrefix("soundcloud:")}")
+                                } else if (item.id.isSpotifyId()) {
                                     navController.navigate("spotify_playlist/${item.id.stripSpotifyPrefix()}")
                                 } else {
                                     navController.navigate("online_playlist/${item.id}")
@@ -375,7 +394,7 @@ fun OnlineSearchResult(
             },
             placeholder = {
                 Text(
-                    text = if (isSpotifySearch) stringResource(R.string.search) else stringResource(R.string.search_yt_music),
+                    text = stringResource(R.string.search),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -444,41 +463,26 @@ fun OnlineSearchResult(
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (isSpotifySearch) {
-                    ChipsRow(
-                        chips = listOf(
-                            null to stringResource(R.string.filter_all),
-                            "track" to stringResource(R.string.filter_songs),
-                            "album" to stringResource(R.string.filter_albums),
-                            "artist" to stringResource(R.string.filter_artists),
-                            "playlist" to stringResource(R.string.filter_playlists),
-                        ),
-                        currentValue = spotifyFilterValue,
-                        onValueUpdate = { newFilter ->
-                            viewModel.spotifyFilter.value = newFilter
-                            coroutineScope.launch {
-                                lazyListState.animateScrollToItem(0)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
+                run {
+                    val hasYouTube = OnlineProvider.YOUTUBE_MUSIC in enabledProviders
+                    val chips = mutableListOf(
+                        null to stringResource(R.string.filter_all),
+                        "songs" to stringResource(R.string.filter_songs),
                     )
-                } else {
+                    if (hasYouTube) chips.add("videos" to stringResource(R.string.filter_videos))
+                    chips.add("albums" to stringResource(R.string.filter_albums))
+                    chips.add("artists" to stringResource(R.string.filter_artists))
+                    chips.add("playlists" to stringResource(R.string.filter_playlists))
+                    if (hasYouTube) {
+                        chips.add("featured_playlists" to stringResource(R.string.filter_featured_playlists))
+                        chips.add("podcasts" to stringResource(R.string.filter_podcasts))
+                    }
+
                     ChipsRow(
-                        chips = listOf(
-                            null to stringResource(R.string.filter_all),
-                            FILTER_SONG to stringResource(R.string.filter_songs),
-                            FILTER_VIDEO to stringResource(R.string.filter_videos),
-                            FILTER_ALBUM to stringResource(R.string.filter_albums),
-                            FILTER_ARTIST to stringResource(R.string.filter_artists),
-                            FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
-                            FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
-                            FILTER_PODCAST to stringResource(R.string.filter_podcasts),
-                        ),
-                        currentValue = searchFilter,
-                        onValueUpdate = {
-                            if (viewModel.filter.value != it) {
-                                viewModel.filter.value = it
-                            }
+                        chips = chips,
+                        currentValue = activeFilterValue,
+                        onValueUpdate = { newFilter ->
+                            viewModel.activeFilter.value = newFilter
                             coroutineScope.launch {
                                 lazyListState.animateScrollToItem(0)
                             }

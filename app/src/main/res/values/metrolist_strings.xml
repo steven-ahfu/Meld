@@ -387,6 +387,7 @@
     <string name="spotify_music_source_description">Choose where to load your library from</string>
     <string name="spotify_source_youtube">YouTube Music</string>
     <string name="spotify_source_spotify">Spotify</string>
+    <string name="spotify_source_soundcloud">SoundCloud</string>
     <string name="spotify_logging_in">Connecting to Spotify…</string>
     <string name="spotify_status_verifying">Verifying credentials…</string>
     <string name="spotify_status_connecting">Obtaining access token…</string>
@@ -409,7 +410,7 @@
     <string name="spotify_preload_completed">Preload completed</string>
     <string name="spotify_preload_cancelled">Preload cancelled</string>
     <string name="spotify_use_for_search">Use Spotify for search</string>
-    <string name="spotify_use_for_search_description">Search results will come from Spotify instead of YouTube Music</string>
+    <string name="spotify_use_for_search_description">Include Spotify results alongside YouTube Music when searching</string>
     <string name="spotify_use_for_home">Use Spotify for home</string>
     <string name="spotify_use_for_home_description">Home screen will show personalized content from Spotify</string>
     <string name="spotify_home_only">Spotify-only home</string>
@@ -428,6 +429,33 @@
     <!-- Spotify playlist editing -->
     <string name="spotify_remove_from_playlist">Remove from playlist</string>
     <string name="spotify_remove_from_playlist_desc">Remove this track from the Spotify playlist</string>
+
+    <!-- SoundCloud -->
+    <string name="soundcloud_integration">SoundCloud Integration</string>
+    <string name="soundcloud_not_logged_in">Not logged in</string>
+    <string name="soundcloud_enable">Use SoundCloud as source</string>
+    <string name="soundcloud_enable_description">Enable SoundCloud surfaces in Meld once you have signed in</string>
+    <string name="soundcloud_use_for_search">Use SoundCloud for search</string>
+    <string name="soundcloud_use_for_search_description">Include SoundCloud results alongside YouTube Music when searching</string>
+    <string name="soundcloud_use_for_home">Use SoundCloud for home</string>
+    <string name="soundcloud_use_for_home_description">Home screen will show sections backed by your SoundCloud account</string>
+    <string name="soundcloud_use_for_library">Show SoundCloud in library</string>
+    <string name="soundcloud_use_for_library_description">Adds a provider-aware SoundCloud entry inside your library</string>
+    <string name="soundcloud_login_required">Sign in to SoundCloud to enable provider-aware search, home, and library surfaces.</string>
+    <string name="soundcloud_login">Log in with SoundCloud</string>
+    <string name="soundcloud_login_description">Sign in with your SoundCloud account to access your likes, playlists, artists, and streaming playback.</string>
+    <string name="soundcloud_logging_in">Connecting to SoundCloud…</string>
+    <string name="soundcloud_status_verifying">Verifying authorization…</string>
+    <string name="soundcloud_status_connecting">Obtaining access token…</string>
+    <string name="soundcloud_status_loading_profile">Loading your profile…</string>
+    <string name="soundcloud_login_success">Connected to SoundCloud</string>
+    <string name="soundcloud_login_error">Login failed. Please try again.</string>
+    <string name="soundcloud_login_error_state">The login session was invalid. Please try again.</string>
+    <string name="soundcloud_login_error_network">Network error. Please check your connection and try again.</string>
+    <string name="soundcloud_login_error_config">SoundCloud client credentials are missing. Set SOUNDCLOUD_CLIENT_ID and SOUNDCLOUD_CLIENT_SECRET.</string>
+    <string name="soundcloud_login_error_browser">No browser is available to complete the SoundCloud login flow.</string>
+    <string name="soundcloud_login_waiting_for_browser">Continue in your browser, then return to Meld after approving SoundCloud access.</string>
+    <string name="soundcloud_login_open_browser">Open SoundCloud Login</string>
     <string name="spotify_track_removed">Track removed from playlist</string>
     <string name="spotify_rename_playlist">Rename playlist</string>
     <string name="spotify_playlist_name_label">Playlist name</string>
@@ -654,6 +682,8 @@
     <string name="listen_together_view_logs_desc">Debug connection and messages</string>
     <string name="listen_together_logs">Connection logs</string>
     <string name="listen_together_no_logs">No logs yet</string>
+    <string name="listen_together_auto_approval">Auto-approve join requests</string>
+    <string name="listen_together_auto_approval_desc">Automatically approve join requests instead of reviewing them manually</string>
     <string name="listen_together_auto_approval_joins">Auto-approve join requests</string>
     <string name="listen_together_auto_approval_joins_desc">Automatically approve join requests instead of reviewing them manually</string>
     <string name="listen_together_auto_approval_suggestions">Auto-approve song suggestions</string>

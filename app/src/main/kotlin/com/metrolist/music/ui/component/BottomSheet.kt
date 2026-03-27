@@ -13,10 +13,9 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.DraggableState
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -133,11 +132,9 @@ fun BottomSheet(
                 Modifier
                     .graphicsLayer {
                         alpha = 1f - (state.progress * 4).coerceAtMost(1f)
-                    }.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { if (isExpandable) state.expandSoft() },
-                    ).fillMaxWidth()
+                    }.pointerInput(isExpandable) {
+                        detectTapGestures { if (isExpandable) state.expandSoft() }
+                    }.fillMaxWidth()
                     .height(state.collapsedBound),
                 content = collapsedContent,
             )

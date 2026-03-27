@@ -7,7 +7,6 @@ package com.metrolist.music.ui.component
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -32,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -236,12 +234,10 @@ fun SpotifyPlaylistSectionRow(
                 isActive = false,
                 isPlaying = false,
                 modifier = Modifier
-                    .pointerInput(playlist.id) {
-                        detectTapGestures(
-                            onTap = { onPlaylistClick(playlist) },
-                            onLongPress = { onPlaylistLongClick?.invoke(playlist) },
-                        )
-                    },
+                    .combinedClickable(
+                        onClick = { onPlaylistClick(playlist) },
+                        onLongClick = { onPlaylistLongClick?.invoke(playlist) },
+                    ),
             )
         }
     }

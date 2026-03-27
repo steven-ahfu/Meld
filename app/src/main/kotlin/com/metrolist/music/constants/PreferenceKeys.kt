@@ -184,7 +184,26 @@ val MusicSourceKey = stringPreferencesKey("musicSource")
 enum class MusicSource {
     YOUTUBE_MUSIC,
     SPOTIFY,
+    SOUNDCLOUD,
 }
+
+enum class OnlineProvider {
+    YOUTUBE_MUSIC,
+    SPOTIFY,
+    SOUNDCLOUD,
+}
+
+val EnableSoundCloudKey = booleanPreferencesKey("enableSoundCloud")
+val UseSoundCloudSearchKey = booleanPreferencesKey("useSoundCloudSearch")
+val UseSoundCloudHomeKey = booleanPreferencesKey("useSoundCloudHome")
+val UseSoundCloudLibraryKey = booleanPreferencesKey("useSoundCloudLibrary")
+val SoundCloudClientIdKey = stringPreferencesKey("soundCloudClientId")
+val SoundCloudAccessTokenKey = stringPreferencesKey("soundCloudAccessToken")
+val SoundCloudRefreshTokenKey = stringPreferencesKey("soundCloudRefreshToken")
+val SoundCloudTokenExpiryKey = longPreferencesKey("soundCloudTokenExpiry")
+val SoundCloudUserIdKey = stringPreferencesKey("soundCloudUserId")
+val SoundCloudUsernameKey = stringPreferencesKey("soundCloudUsername")
+val SoundCloudAvatarUrlKey = stringPreferencesKey("soundCloudAvatarUrl")
 
 val ChipSortTypeKey = stringPreferencesKey("chipSortType")
 val SongSortTypeKey = stringPreferencesKey("songSortType")
