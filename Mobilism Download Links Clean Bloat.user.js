@@ -363,7 +363,16 @@
             } catch (e) {}
         });
 
-        // getComputedStyle is another common detection surface.
+        // getComputedStyle is another common detection surface. Detectors read
+        // properties both directly (`style.display`) and through the
+        // CSSStyleDeclaration methods (`style.getPropertyValue('display')`,
+        // `style.getPropertyPriority('display')`), so every access path has to
+        // report the bait element as visible.
+        const spoofedVisible = {
+            display: 'block',
+            visibility: 'visible',
+            opacity: '1'
+        };
         const originalGetComputedStyle = window.getComputedStyle;
         window.getComputedStyle = function (el, pseudo) {
             const style = originalGetComputedStyle.call(this, el, pseudo);
@@ -374,9 +383,23 @@
                 if (/pub_\d+x\d+|text[-_]?ads?|ad[-_]?(banner|box|bait)|adsbox|adsbygoogle/i.test(signature)) {
                     return new Proxy(style, {
                         get: function (target, prop) {
-                            if (prop === 'display') return 'block';
-                            if (prop === 'visibility') return 'visible';
-                            if (prop === 'opacity') return '1';
+                            if (typeof prop === 'string' && prop in spoofedVisible) {
+                                return spoofedVisible[prop];
+                            }
+                            if (prop === 'getPropertyValue') {
+                                return function (name) {
+                                    const key = typeof name === 'string' ? name.toLowerCase() : '';
+                                    if (key in spoofedVisible) return spoofedVisible[key];
+                                    return target.getPropertyValue(name);
+                                };
+                            }
+                            if (prop === 'getPropertyPriority') {
+                                return function (name) {
+                                    const key = typeof name === 'string' ? name.toLowerCase() : '';
+                                    if (key in spoofedVisible) return '';
+                                    return target.getPropertyPriority(name);
+                                };
+                            }
                             const v = target[prop];
                             return typeof v === 'function' ? v.bind(target) : v;
                         }
@@ -388,15 +411,32 @@
 
         // Remove any overlay that slips through the CSS (e.g. dynamically-created
         // wrappers with no stable class). Also restore scroll-locking styles.
-        function cleanupOverlays() {
-            const patterns = /adblock|ad-block|blockadblock|adb-modal|adb-overlay/i;
-            document.querySelectorAll('div, section, aside').forEach(function (el) {
-                const cls = typeof el.className === 'string' ? el.className : '';
-                const id = el.id || '';
-                if (patterns.test(cls) || patterns.test(id)) {
-                    el.remove();
-                }
-            });
+        const overlayPattern = /adblock|ad-block|blockadblock|adb-modal|adb-overlay/i;
+        const overlayTags = { DIV: 1, SECTION: 1, ASIDE: 1 };
+
+        function matchesOverlay(el) {
+            if (!el || el.nodeType !== 1 || !overlayTags[el.tagName]) return false;
+            const cls = typeof el.className === 'string' ? el.className : '';
+            const id = el.id || '';
+            return overlayPattern.test(cls) || overlayPattern.test(id);
+        }
+
+        function inspectNode(node) {
+            if (!node || node.nodeType !== 1) return;
+            if (matchesOverlay(node)) {
+                node.remove();
+                return;
+            }
+            // Overlay can be nested under the added subtree; scope the scan to it
+            // so we avoid the whole-document walk on every mutation.
+            if (node.querySelectorAll) {
+                node.querySelectorAll('div, section, aside').forEach(function (el) {
+                    if (matchesOverlay(el)) el.remove();
+                });
+            }
+        }
+
+        function restoreScrollStyles() {
             if (document.body) {
                 document.body.style.overflow = '';
                 document.body.style.position = '';
@@ -404,9 +444,26 @@
             document.documentElement.style.overflow = '';
         }
 
+        function initialCleanup() {
+            document.querySelectorAll('div, section, aside').forEach(function (el) {
+                if (matchesOverlay(el)) el.remove();
+            });
+            restoreScrollStyles();
+        }
+
+        function onMutations(records) {
+            for (let i = 0; i < records.length; i++) {
+                const record = records[i];
+                for (let j = 0; j < record.addedNodes.length; j++) {
+                    inspectNode(record.addedNodes[j]);
+                }
+            }
+            restoreScrollStyles();
+        }
+
         function startObserver() {
-            cleanupOverlays();
-            new MutationObserver(cleanupOverlays).observe(document.documentElement, {
+            initialCleanup();
+            new MutationObserver(onMutations).observe(document.documentElement, {
                 childList: true,
                 subtree: true
             });
